@@ -1,0 +1,14 @@
+# Virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# Config privat
+.env
+
+# Date generate
+data/
+chroma_db/
+
+# Altele
+*.pdf

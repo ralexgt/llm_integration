@@ -16,7 +16,7 @@ Acest proiect implementează assignment-ul de LLM Integratons (ChromaDB cu embed
    python -m venv .venv && .venv\Scripts\activate # Unix: source .venv/bin/activate
    pip install -r requirements.txt
    ```
-2. **Cheia OpenAI**
+2. **Cheia OpenAI daca nu va fi adaugat in .env**
    ```bash
    export OPENAI_API_KEY=your_key_here  # Windows: set OPENAI_API_KEY=...
    ```
@@ -47,3 +47,4 @@ Acest proiect implementează assignment-ul de LLM Integratons (ChromaDB cu embed
 ## Note
 
 - `get_summary_by_title` caută în JSON-ul local și returnează rezumatul complet.
+- Pentru a modifica numarul de recomandari primite la fiecare query modificati variabila de environment TOP_K

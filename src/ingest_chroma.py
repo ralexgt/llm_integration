@@ -58,22 +58,28 @@ def main():
 
     def _to_meta_value(v):
         # Chroma metadata must be primitive or None
+        if v is None:
+            return ""
         if isinstance(v, list):
-            return ", ".join([str(x) for x in v])
-        return v
+            return ", ".join([str(x) for x in v if x is not None])
+        return str(v)
 
     for r in records:
-        rid = r.get("id") or r.get("title")
+        rid = r.get("id") or r.get("title") or "unknown"
         ids.append(str(rid))
 
         docs.append(build_doc(r))
 
+        # Ensure all metadata fields are never None and are strings or numbers
+        year_val = r.get("year")
+        if year_val is None:
+            year_val = ""
         metadatas.append({
             "title": _to_meta_value(r.get("title")),
             "authors": _to_meta_value(r.get("authors", [])),
             "themes": _to_meta_value(r.get("themes", [])),
             "subjects": _to_meta_value(r.get("subjects", [])),
-            "year": r.get("year"),  # None/number e OK
+            "year": year_val,
         })
 
     # Compute embeddings with OpenAI and add to Chroma

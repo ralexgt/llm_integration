@@ -3,6 +3,7 @@ from collections import OrderedDict
 from typing import List, Dict, Optional
 import requests
 from tqdm import tqdm
+import argparse
 
 DEFAULT_TOPICS = [
     "fantasy", "science_fiction", "friendship", "love", "adventure", "war",
@@ -20,7 +21,8 @@ def unique(seq):
     for x in seq:
         if x in seen:
             continue
-        seen.add(x); out.append(x)
+        seen.add(x)
+        out.append(x)
     return out
 
 def _safe_desc_field(desc) -> Optional[str]:
@@ -115,7 +117,6 @@ def fetch_subject(topic: str, limit: int = 50) -> List[Dict]:
     return items
 
 def main():
-    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=150, help="Număr total minimal de cărți dorit")
     ap.add_argument("--per_topic", type=int, default=40, help="Câte rezultate/temă să cerem")

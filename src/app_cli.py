@@ -16,8 +16,7 @@ COLLECTION = os.getenv("COLLECTION", "books")
 TOP_K = int(os.getenv("TOP_K", "5"))
 BOOKS_JSON = os.getenv("BOOKS_JSON", os.path.join(os.path.dirname(__file__), "..", "data", "books.json"))
 
-# ---- Pricing maps (USD) ----
-# Actualizează dacă schimbi modelele; valorile sunt estimative.
+# * Pricing (USD)
 PRICE_PER_M_IN = {
     "gpt-4o": 5.00,
     "gpt-4o-mini": 0.60,
@@ -26,7 +25,6 @@ PRICE_PER_M_OUT = {
     "gpt-4o": 20.00,
     "gpt-4o-mini": 2.40,
 }
-# Embeddings (pret / 1K tokens)
 EMB_PRICE_PER_1K = {
     "text-embedding-3-small": 0.00002,
     "text-embedding-3-large": 0.00013,
@@ -46,7 +44,6 @@ def _cost_embed(model: str, tok: int) -> float:
     return (tok / 1_000) * per_1k
 
 def get_summary_by_title(title: str) -> str:
-    # Tool local: caută în JSON rezumatul complet (sau fallback la summary)
     try:
         with open(BOOKS_JSON, "r", encoding="utf-8") as f:
             books = json.load(f)
@@ -58,12 +55,10 @@ def get_summary_by_title(title: str) -> str:
     return "Rezumat indisponibil."
 
 def search_similar(query: str):
-    # Embedează întrebarea și interoghează Chroma pentru TOP_K
     oa = OpenAI()
     emb_resp = oa.embeddings.create(model=OPENAI_MODEL_EMB, input=query)
     emb = emb_resp.data[0].embedding
 
-    # usage embeddings (dacă SDK îl oferă)
     emb_tokens = 0
     try:
         emb_tokens = getattr(getattr(emb_resp, "usage", None), "total_tokens", 0) or \
@@ -89,7 +84,6 @@ def search_similar(query: str):
     return items, emb_tokens
 
 def build_prompt(query: str, candidates: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    # Construiește context minimal (doar metadate utile)
     context_blocks = []
     for c in candidates[:TOP_K]:
         md = c["metadata"]
@@ -99,7 +93,6 @@ def build_prompt(query: str, candidates: List[Dict[str, Any]]) -> List[Dict[str,
         )
     context = "\n".join(context_blocks)
 
-    # Prompt strict: doar în română, un singur titlu, format fix + JSON de titlu la final
     sys_prompt = (
         "Ești un bibliotecar AI care răspunde STRICT în limba română. "
         "Primești o întrebare a utilizatorului despre interese/teme și o listă de cărți candidate dintr-un vector store. "
@@ -133,16 +126,13 @@ def chat_once(query: str):
     )
     text = resp.choices[0].message.content.strip()
 
-    # usage chat
     in_tok = getattr(getattr(resp, "usage", None), "prompt_tokens", 0)
     out_tok = getattr(getattr(resp, "usage", None), "completion_tokens", 0)
     total_tok = getattr(getattr(resp, "usage", None), "total_tokens", in_tok + out_tok)
 
-    # costuri
     chat_cost = _cost_chat(OPENAI_MODEL_GPT, in_tok, out_tok)
     emb_cost = _cost_embed(OPENAI_MODEL_EMB, emb_tokens) if emb_tokens else 0.0
 
-    # Extrage titlul din JSON-ul de pe ultima linie
     chosen_title = None
     for line in text.splitlines()[::-1]:
         line = line.strip()
@@ -159,7 +149,7 @@ def chat_once(query: str):
     return text, usage, (chosen_title or "")
 
 def main():
-    console.print("[bold green]Smart Librarian CLI[/bold green] — scrie întrebarea ta (Ctrl+C pentru ieșire)")
+    console.print("[bold green]Smart Librarian — RAG + CAG [/bold green](Ctrl+C pentru ieșire)")
     while True:
         try:
             q = console.input("[bold cyan]?[/bold cyan] ")
@@ -170,23 +160,32 @@ def main():
             continue
 
         answer, usage, title = chat_once(q)
-        # Afișează răspunsul modelului (deja în formatul cerut)
-        console.print(Markdown(answer))
+        summary = get_summary_by_title(title) if title else "Rezumat indisponibil."
 
-        # Afișează rezumatul complet pentru titlul ales
+        console.print(f"Titlu: {title}")
+        console.print(f"Rezumat: {summary}")
+        console.print("[yellow]-"*100+"[/yellow]")
         if title:
-            summary = get_summary_by_title(title)
-            console.print(Markdown(f"\n**Rezumat pentru:** _{title}_\n{summary}"))
+            console.print(json.dumps({"title": title, "summary": summary}, ensure_ascii=False, indent=4))
 
-        # Afișează usage + costuri
+        # RAG/CAG Sources
+        candidates, _ = search_similar(q)
+        surse = []
+        for c in candidates:
+            md = c.get("metadata", {})
+            titlu = md.get("title", "")
+            idurl = md.get("id", "") or c.get("id", "")
+            if idurl and not str(idurl).startswith("http"):
+                idurl = f"https://openlibrary.org{str(idurl)}"
+            if titlu:
+                surse.append(f"{titlu}({idurl})")
+        if surse:
+            console.print(f"Surse RAG/CAG: {' | '.join(surse)}")
+
         in_tok, out_tok, total_tok, emb_tok, chat_cost, emb_cost = usage
         total_cost = chat_cost + emb_cost
         console.print(
-            f"\n[dim]Tokeni chat: in={in_tok}, out={out_tok}, total={total_tok} | "
-            f"Tokeni embeddings: {emb_tok} | "
-            f"Cost estimat: chat ${chat_cost:.6f} + emb ${emb_cost:.6f} = "
-            f"[bold]${total_cost:.6f}[/bold] "
-            f"(modele: {OPENAI_MODEL_GPT}, {OPENAI_MODEL_EMB})[/dim]"
+            f"[dim]Tokeni chat: in={in_tok}, out={out_tok}, total={total_tok} | emb={emb_tok} | cost≈${total_cost:.6f}[/dim]"
         )
 
 if __name__ == "__main__":
